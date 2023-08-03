@@ -7,11 +7,18 @@ class CryptTree:
         self.name = name
         self.parent = parent
         self.DKf = Fernet.generate_key()  # Data Key
-        self.BKf = parent.BKf if parent else Fernet.generate_key()  # Backlink Key
+        self.BKf = Fernet.generate_key()  # Backlink Key
         self.SKf = Fernet.generate_key()  # Subfolder Key
         self.FKf = Fernet.generate_key()  # File Key
-        self.CKf = parent.CKf if parent else Fernet.generate_key()  # Clearance Key (Optional)
+        self.CKf = Fernet.generate_key()  # Clearance Key (Optional)
         self.accessors = {}  # Users who can access this node
+
+        if parent:
+            # If this node has a parent, link all keys to the parent's keys
+            self.BKf = parent.BKf
+            self.SKf = parent.SKf
+            self.FKf = parent.FKf
+            self.CKf = parent.CKf
 
     def grant_access(self, user):
         self.accessors[user.name] = user
