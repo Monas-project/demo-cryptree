@@ -7,15 +7,15 @@ class CryptTree:
         self.name = name
         self.parent = parent
         self.DKf = Fernet.generate_key()  # Data Key
-        self.BKf = Fernet.generate_key()  # Backlink Key
+        self.BKf = parent.BKf if parent else Fernet.generate_key()  # Backlink Key
         self.SKf = Fernet.generate_key()  # Subfolder Key
         self.FKf = Fernet.generate_key()  # File Key
-        self.CKf = Fernet.generate_key()  # Clearance Key (Optional)
+        self.CKf = parent.CKf if parent else Fernet.generate_key()  # Clearance Key (Optional)
         self.accessors = {}  # Users who can access this node
 
     def grant_access(self, user):
         self.accessors[user.name] = user
-        user.keys[self.name] = self.DKf
+        user.keys[self.name] = (self.DKf, self.BKf, self.SKf, self.FKf, self.CKf)
 
     def revoke_access(self, user):
         if user.name in self.accessors:
@@ -35,12 +35,12 @@ class File(CryptTree):
         self.data = data
 
     def encrypt_data(self):
-        f = Fernet(self.FKf)
+        f = Fernet(self.DKf)
         encrypted_data = f.encrypt(self.data.encode())
         return encrypted_data
 
     def decrypt_data(self, encrypted_data):
-        f = Fernet(self.FKf)
+        f = Fernet(self.DKf)
         decrypted_data = f.decrypt(encrypted_data).decode()
         return decrypted_data
 
@@ -53,6 +53,9 @@ class Folder(CryptTree):
 
     def add_file(self, file):
         self.files.append(file)
+        file.parent = self
+        file.BKf = self.BKf
+        file.CKf = self.CKf
 
     def add_folder(self, folder):
         self.folders.append(folder)
