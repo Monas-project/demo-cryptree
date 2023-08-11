@@ -1,27 +1,30 @@
 # import os
 from cryptography.fernet import Fernet
+import json
 
 
 class CryptTree:
     def __init__(self, name, controller_did, parent=None, location_uri=None,filename=None):
         self.name = name
         self.controller_did = controller_did # cryptreeを制御するDID
-        self.parent = parent
+        self.parent = None
         self.location_uri = location_uri
         self.filename = filename
-        self.DKf = Fernet.generate_key()  # Data Key
-        self.BKf = Fernet.generate_key()  # Backlink Key
-        self.SKf = Fernet.generate_key()  # Subfo,lder Key
-        self.FKf = Fernet.generate_key()  # File Key
-        self.CKf = Fernet.generate_key()  # Clearance Key (Optional)
         self.accessors = {}  # Users who can access this node
 
         if parent:
-            # If this node has a parent, link all keys to the parent's keys
-            self.BKf = parent.BKf
+            # Inherit all keys except BKf from parent
+            self.DKf = parent.DKf
+            self.BKf = Fernet.generate_key()
             self.SKf = parent.SKf
             self.FKf = parent.FKf
             self.CKf = parent.CKf
+        else:
+            self.DKf = Fernet.generate_key() # Data Key
+            self.BKf = Fernet.generate_key() # Backlink Key
+            self.SKf = Fernet.generate_key() # Subfolder Key
+            self.FKf = Fernet.generate_key() # File Key
+            self.CKf = Fernet.generate_key() # Clearance Key (Optional)
 
     def grant_access(self, user):
         self.accessors[user.name] = user
@@ -43,6 +46,7 @@ class File(CryptTree):
     def __init__(self, name, data, parent=None, location_uri=None, filename=None):
         super().__init__(name, parent,location_uri=location_uri,filename=filename)
         self.data = data
+        self.parent_link = None
 
     def encrypt_data(self):
         f = Fernet(self.DKf)
@@ -53,6 +57,20 @@ class File(CryptTree):
         f = Fernet(self.DKf)
         decrypted_data = f.decrypt(encrypted_data).decode()
         return decrypted_data
+    
+    #JSONの暗号化
+    def encrypt_metadata(self):
+    #metadataはファイル名、作成日時、保存場所
+        metadata = {
+            "filename": self.filename,
+            "creation_date": "some_date",
+            "location": self.location_uri
+        }
+
+        metadata_json = json.dumps(metadata).encode()
+        f = Fernet(self.FKf)
+        encrypted_metadata = f.encrypt(metadata_json)
+        return encrypted_metadata
 
 
 class Folder(CryptTree):
@@ -60,18 +78,46 @@ class Folder(CryptTree):
         super().__init__(name, parent)
         self.files = []
         self.folders = []
+        self.child_bkfs = {}
 
     def add_file(self, file):
         self.files.append(file)
         file.parent = self
-        file.BKf = self.BKf
-        file.CKf = self.CKf
+        file.BKf = Fernet.generate_key()
+        file.SKf = self.SKf
+        file.FKf = self.FKf
+
+        #子ファイルのBKfを保持
+        self.child_bkfs[file.name] = file.BKf
+
+        #BKfで親の名前を隠している
+        f = Fernet(self.BKf)
+        encrypted_link = f.encrypt(file.name.encode())
+        file.parent_link = encrypted_link
 
     def add_folder(self, folder):
         self.folders.append(folder)
         folder.parent = self
-        folder.BKf = self.BKf
-        folder.CKf = self.CKf
+        folder.BKf = Fernet.generate_key()
+        folder.SKf = self.SKf
+        folder.FKf = self.FKf
+
+        #BKfで親の名前を隠している
+        f = Fernet(folder.BKf)
+        encrypted_link = f.encrypt(folder.name.encode())
+        folder.parent_link = encrypted_link
+
+    def encrypt_metadata(self):
+        #metadataはフォルダ名、作成日時
+        metadata = {
+            "foldername": self.name,
+            "creation_date": "some_date",
+        }
+
+        metadata_json = json.dumps(metadata).encode()
+        f = Fernet(self.SKf)
+        encrypted_metadata = f.encrypt(metadata_json)
+        return encrypted_metadata
 
 # テスト用の関数
 
@@ -102,7 +148,7 @@ def main():
     encrypted_data = file1.encrypt_data()
     print("Encrypted data:", encrypted_data)
     decrypted_data = file1.decrypt_data(encrypted_data)
-    print("Decrypted data:", decrypted_data)
+    print("Decrypted data:", decrypted_data)                                                                                                                                                                                                                            
 
 
 if __name__ == "__main__":
