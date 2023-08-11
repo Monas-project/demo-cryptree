@@ -3,12 +3,15 @@ from cryptography.fernet import Fernet
 
 
 class CryptTree:
-    def __init__(self, name, parent=None):
+    def __init__(self, name, controller_did, parent=None, location_uri=None,filename=None):
         self.name = name
+        self.controller_did = controller_did # cryptreeを制御するDID
         self.parent = parent
+        self.location_uri = location_uri
+        self.filename = filename
         self.DKf = Fernet.generate_key()  # Data Key
         self.BKf = Fernet.generate_key()  # Backlink Key
-        self.SKf = Fernet.generate_key()  # Subfolder Key
+        self.SKf = Fernet.generate_key()  # Subfo,lder Key
         self.FKf = Fernet.generate_key()  # File Key
         self.CKf = Fernet.generate_key()  # Clearance Key (Optional)
         self.accessors = {}  # Users who can access this node
@@ -37,8 +40,8 @@ class User:
 
 
 class File(CryptTree):
-    def __init__(self, name, data, parent=None):
-        super().__init__(name, parent)
+    def __init__(self, name, data, parent=None, location_uri=None, filename=None):
+        super().__init__(name, parent,location_uri=location_uri,filename=filename)
         self.data = data
 
     def encrypt_data(self):
@@ -76,10 +79,11 @@ class Folder(CryptTree):
 def main():
     user1 = User("User1")
     user2 = User("User2")
-
-    root_folder = Folder("Root")
+    
+    controller_did = "did:key:xyz"
+    root_folder = Folder("Root", controller_did)
     folder1 = Folder("Folder1", parent=root_folder)
-    file1 = File("File1", "Data of File1", parent=folder1)
+    file1 = File("File1", "Data of File1", parent=folder1, location_uri="ipfs://CID1", filename="document.txt")
     folder1.add_file(file1)
     root_folder.add_folder(folder1)
 
