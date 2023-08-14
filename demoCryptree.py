@@ -51,73 +51,60 @@ class CryptTree:
         return decrypted_parent_name
     
     def find_nodes_to_reencrypt(self, target_node):
-        nodes_to_reenctypt = [target_node]
+        nodes_to_reencrypt = [target_node]
 
         #対象ノードの子孫ノード再帰的に追加(特定ノードとその子孫ノードを全て返す)
-        def collet_children(node):
+        def collect_children(node):
             if isinstance(node, Folder):
                 for child_file in node.files:
-                    nodes_to_reenctypt.append(child_file)
-                    collet_children(child_file)
+                    nodes_to_reencrypt.append(child_file)
+                    collect_children(child_file) 
                 for child_folder in node.folders:
-                    nodes_to_reenctypt.append(child_folder)
-                    collet_children(child_folder)
+                    nodes_to_reencrypt.append(child_folder)
+                    collect_children(child_folder)
 
-        collet_children(target_node)
-        return nodes_to_reenctypt
-    
+        collect_children(target_node)
+        return nodes_to_reencrypt
+
     def reencrypt_nodes(self, target_node):
-        #指定された対象ノードと子孫ノードを収集
         nodes_to_reencrypt = self.find_nodes_to_reencrypt(target_node)
 
-        #各ノードに対して新しい鍵を生成し、再暗号化
-        for node in nodes_to_reencrypt:
+        #最下層から最上層へ順序付けて再暗号化
+        for node in reversed(nodes_to_reencrypt):
 
-            #ノードがファイルの場合復号化
+            #新しい鍵の生成
+            new_DKf = Fernet.generate_key()
+            new_BKf = Fernet.generate_key()
+            new_SKf = Fernet.generate_key() if isinstance(node, Folder) else node.SKf
+            new_FKf = Fernet.generate_key() if isinstance(node, File) else node.FKf
+
+            #ノードがファイルの場合の処理
             if isinstance(node, File):
                 decrypted_data = node.decrypt_data(node.data)
                 decrypted_metadata = node.decrypt_metadata(node.metadata)
-
-                #新しい鍵を生成
-                node.DKf = Fernet.generate_key()
-                node.BKf = Fernet.generate_key()
-                node.SKf = Fernet.generate_key()
-                node.FKf = Fernet.generate_key()
-                node.CKf = Fernet.generate_key()
-
-                #新しい鍵でデータとメタデータを再暗号化
+                node.DKf = new_DKf
+                node.FKf = new_FKf
                 encrypted_data = node.encrypt_data(decrypted_data)
                 encrypted_metadata = node.encrypt_metadata(decrypted_metadata)
-
-                #新しい暗号化されたデータとメタデータを保存
                 node.data = encrypted_data
                 node.metadata = encrypted_metadata
 
+            #ノードがファイルの場合の処理
             elif isinstance(node, Folder):
-                # フォルダのメタデータの復号化
-                f = Fernet(node.SKf)
                 decrypted_metadata = node.decrypt_metadata(node.metadata)
-
-                node.DKf = Fernet.generate_key()
-                node.BKf = Fernet.generate_key()
-                new_SKf = Fernet.generate_key()
-                node.FKf = Fernet.generate_key()
-                node.CKf = Fernet.generate_key()
-
-                #子ノードに新しいSKfを適用
-                node.SKf = Fernet.generate_key()
-
-                #新しい鍵でメタデータを再暗号化
+                node.SKf = new_SKf
                 f = Fernet(new_SKf)
                 encrypted_metadata = f.encrypt(json.dumps(decrypted_metadata).encode())
                 node.metadata = encrypted_metadata
-
-                # 子ノードに新しい SKf を適用
-                node.SKf = new_SKf
                 for child_folder in node.folders:
                     child_folder.SKf = new_SKf
-                for child_file in node.files:
-                    child_file.SKf = new_SKf
+
+            #共通の処理(BKFの再暗号)
+            if node.parent:
+                node.BKf = new_BKf
+                encrypted_parent_name = Fernet(new_BKf).encrypt(node.parent.name.encode())
+                node.encrypted_parent_name = encrypted_parent_name
+                node.parent.child_bkfs[node.name] = new_BKf
 
 class User:
     def __init__(self, name):
@@ -134,11 +121,14 @@ class File(CryptTree):
 
     def encrypt_data(self):
         f = Fernet(self.DKf)
+        print("Encrypting data with key:", self.DKf)
         encrypted_data = f.encrypt(self.data.encode())
+        print("Encrypted data:", encrypted_data)
         return encrypted_data
 
     def decrypt_data(self, encrypted_data):
         f = Fernet(self.DKf)
+        print("Decrypting data with key:", self.DKf)
         decrypted_data = f.decrypt(encrypted_data).decode()
         return decrypted_data
     
@@ -209,84 +199,134 @@ class Folder(CryptTree):
         }
 
         metadata_json = json.dumps(metadata).encode()
-        print("SKf in decrypt_metadata:", self.SKf)
         f = Fernet(self.SKf)
         encrypted_metadata = f.encrypt(metadata_json)
         return encrypted_metadata
     
     def decrypt_metadata(self, encrypted_metadata):
-        print("SKf in encrypt_metadata:", self.SKf)
-        print("Encrypted metadata in decrypt_metadata:", encrypted_metadata)
         f = Fernet(self.SKf)
         decrypted_metadata_json = f.decrypt(encrypted_metadata)
         return json.loads(decrypted_metadata_json.decode())
 
 # テスト用の関数
 
+"""def test_metadata_encryption_and_decryption():
+    file1 = File(name="File1", data="Sample Data")
+
+    # メタデータの暗号化
+    encrypted_metadata = file1.encrypt_metadata()
+
+    # メタデータの復号化
+    decrypted_metadata = file1.decrypt_metadata(encrypted_metadata)
+
+    # 復号化されたメタデータが正しいか確認
+    assert decrypted_metadata == {
+        "filename": file1.filename,
+        "creation_date": "some_date",
+        "location": file1.location_uri
+    }
+    print("Metadata encryption and decryption test passed!")"""
 
 def main():
+    """controller_did = "did:key:xyz"
+    root_folder = Folder("Root", controller_did)
+
+
+
+    #親ノードの暗号化、復号化
+    encrypted_parent_name = root_folder.encrypt_parent_name()
+    if encrypted_parent_name:
+        decrypted_parent_name = root_folder.decrypt_parent_name(encrypted_parent_name)
+        print("Decrypted parent folder name for Root:", decrypted_parent_name)
+    else:
+        print("Root has no parent folder.")
+
+    # Userクラスの初期化
     user1 = User("User1")
     user2 = User("User2")
     
-    controller_did = "did:key:xyz"
-    root_folder = Folder("Root", controller_did)
-    folder1 = Folder("Folder1", parent=root_folder)
+    print("User1's name:", user1.name)  # 期待される出力: "User1"
+    print("User2's name:", user2.name)  # 期待される出力: "User2"
+    print("User1's keys:", user1.keys)  # 期待される出力: {}
+    print("User2's keys:", user2.keys)  # 期待される出力: {}
+
+    # Fileクラスの初期化
+    folder1 = Folder("Folder1")
     file1 = File("File1", "Data of File1", parent=folder1, location_uri="ipfs://CID1", filename="document.txt")
-    folder1.add_file(file1)
-    root_folder.add_folder(folder1)
 
-    folder2 = Folder("Folder2", parent=root_folder)
-    file2 = File("File2", "Data of File2", parent=folder2)
-    folder2.add_file(file2)
-    root_folder.add_folder(folder2)
-
-    folder1.grant_access(user1)
-    folder2.grant_access(user2)
-
-    print("User1's keys:", user1.keys)
-    print("User2's keys:", user2.keys)
-
-    """# ファイルの暗号化と復号化のテスト
+    # ファイルデータの暗号化・復号化テスト
     encrypted_data = file1.encrypt_data()
     print("Encrypted data:", encrypted_data)
     decrypted_data = file1.decrypt_data(encrypted_data)
-    print("Decrypted data:", decrypted_data)
-    #ファイルメタデータの暗号化・復号化テスト
-    encrypted_file_metadata = file1.encrypt_metadata()
-    decrypted_file_metadata = file1.decrypt_metadata(encrypted_file_metadata)
-    print("File metadata", decrypted_file_metadata) #期待されるメタデータと一致するか
+    print("Decrypted data:", decrypted_data)  # 期待される出力: "Data of File1"
 
-    #フォルダメタデータの暗号化・復号化テスト
-    encrypted_folder_metadata = folder1.encrypt_metadata()
-    decrypted_folder_metadata = folder1.decrypt_metadata(encrypted_folder_metadata)
-    print("Folder metadata:", decrypted_folder_metadata)  # 期待されるメタデータと一致するか確認"""
-
-    """#ファイルから親フォルダの名前を復号化して取得するテスト
-    encrypted_parent_name = file1.encrypt_parent_name()
-    if encrypted_parent_name:
-        decrypted_parent_name = file1.decrypt_parent_name(file1.encrypt_parent_name())
-        print("Decrypted parent folder name for FIle1:", decrypted_parent_name)
-    else:
-        print("File1 has no parent folder.")
-
-        print("\n--- Reencryption Test ---")"""
-
-    # フォルダ1にアクセス権を付与
-    folder1.grant_access(user1)
-    print("Granted access to Folder1 for User1.")
-
-    # フォルダ1のデータとメタデータを再暗号化
-    folder1.reencrypt_nodes(folder1)
-    print("Reencrypted data and metadata for Folder1 and its descendants.")
-
-    # 再暗号化後のデータとメタデータを確認
-    encrypted_data = file1.data  # 既に暗号化されている
-    decrypted_data = file1.decrypt_data(encrypted_data)
-    print("Decrypted data after reencryption:", decrypted_data)
-
-    encrypted_metadata = file1.metadata  # 既に暗号化されている
+    # ファイルメタデータの暗号化・復号化テスト
+    encrypted_metadata = file1.encrypt_metadata()
     decrypted_metadata = file1.decrypt_metadata(encrypted_metadata)
-    print("Decrypted metadata after reencryption:", decrypted_metadata)
+    print("File metadata:", decrypted_metadata)  # 期待されるメタデータと一致するか確認
+
+    # Folderクラスの初期化
+    folder1 = Folder("Folder1")
+
+    # フォルダメタデータの暗号化・復号化テスト
+    encrypted_metadata = folder1.encrypt_metadata()
+    decrypted_metadata = folder1.decrypt_metadata(encrypted_metadata)
+    print("Folder metadata:", decrypted_metadata)  # 期待されるメタデータと一致するか確認
+
+    # Folderクラスのadd_fileとadd_folderメソッドのテスト
+    root_folder = Folder("Root")
+    folder1 = Folder("Folder1")
+    file1 = File("File1", "Data of File1")
+
+    # フォルダとファイルを追加
+    root_folder.add_folder(folder1)
+    folder1.add_file(file1)
+
+    # フォルダとファイルが正しく追加されたか確認
+    print("Root folder's child folders:", [folder.name for folder in root_folder.folders])  # 期待される出力: ["Folder1"]
+    print("Folder1's child files:", [file.name for file in folder1.files])  # 期待される出力: ["File1"]"""
+
+    """user1 = User("User1")
+    user2 = User("User2")
+    folder1 = Folder("Folder1")
+
+    # アクセス権の付与
+    folder1.grant_access(user1)
+    print("User1's keys after granting access:", user1.keys)  # 期待される出力: 鍵が含まれるディクショナリ
+
+    # アクセス権の取り消し
+    folder1.revoke_access(user1)
+    print("User1's keys after revoking access:", user1.keys)  # 期待される出力: 空のディクショナリ"""
+    
+    """# インスタンスの作成
+    root_folder = Folder(name="RootFolder")
+    sub_folder = Folder(name="SubFolder", parent=root_folder)
+    file1 = File(name="File1", data="Sample Data", parent=sub_folder)
+    sub_folder.add_file(file1)
+    root_folder.add_folder(sub_folder)
+
+    # 再暗号化前のデータとメタデータを取得
+    original_data = file1.data
+    original_metadata = file1.metadata
+
+    # 再暗号化プロセスを実行
+    root_folder.reencrypt_nodes(target_node=root_folder)
+
+    # 再暗号化後のデータとメタデータを取得
+    reencrypted_data = file1.data
+    reencrypted_metadata = file1.metadata
+
+    # 再暗号化前と後のデータとメタデータが異なることを確認
+    assert original_data != reencrypted_data
+    assert original_metadata != reencrypted_metadata
+
+    # 再暗号化後のデータとメタデータが正しく復号化できることを確認
+    decrypted_data = file1.decrypt_data(reencrypted_data)
+    decrypted_metadata = file1.decrypt_metadata(reencrypted_metadata)
+    assert decrypted_data == "Sample Data"
+    # 他のメタデータの検証もここで追加できます"""
+
+    #test_metadata_encryption_and_decryption()
 
 if __name__ == "__main__":
     main()
