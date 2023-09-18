@@ -1,7 +1,7 @@
 from collections import OrderedDict
 from typing import Optional, Tuple
 
-from cryptree import CryptTreeNode
+from cryptree import PlainNode
 
 class LRUCache:
     def __init__(self, capacity: int):
@@ -11,7 +11,7 @@ class LRUCache:
     def contains_key(self, key) -> bool:
         return key in self.cache
 
-    def get(self, key) -> Optional[CryptTreeNode]:
+    def get(self, key) -> Optional[PlainNode]:
         if key in self.cache:
             self.cache.move_to_end(key)
             return self.cache[key]
@@ -32,13 +32,13 @@ class CryptreeCache:
     def contains_key(self, cache_key: Tuple) -> bool:
         return self.cache.contains_key(cache_key)
 
-    def get(self, cache_key: str) -> Optional[CryptTreeNode]:
+    def get(self, cache_key: str) -> Optional[PlainNode]:
         return self.cache.get(cache_key)
 
-    def put(self, cache_key: str, val: CryptTreeNode) -> None:
+    def put(self, cache_key: str, val: PlainNode) -> None:
         self.cache.put(cache_key, val)
 
-    def update(self, prior_root: CryptTreeNode, cache_key: Tuple, val: CryptTreeNode) -> None:
+    def update(self, prior_root: PlainNode, cache_key: Tuple, val: PlainNode) -> None:
         if prior_root is not None:
             temp_dict = dict(self.cache.cache)
             for key, value in temp_dict.items():
