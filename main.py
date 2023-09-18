@@ -10,7 +10,7 @@ app = FastAPI()
 
 fake_ipfs = FakeIPFS()
 cryptree_cache = CryptreeCache()
-node = CryptTreeNode(name="root", isDirectory=True, parent=None)ß
+node = CryptTreeNode(name="root", isDirectory=True, parent=None)
 
 @app.get("/{path}")
 def read(path: str):
