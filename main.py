@@ -1,8 +1,10 @@
-import json, pickle
+import json
+import pickle
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from cryptography.fernet import Fernet
 
-from fakeIPFS import FakeIPFS 
+from fakeIPFS import FakeIPFS
 from cache import CryptreeCache
 from cryptree import CryptTreeNode, PlainNode
 from model import RootRequest, UploadDataRequest
@@ -12,19 +14,41 @@ fake_ipfs = FakeIPFS()
 cryptree_cache = CryptreeCache()
 current_node = None
 
+# CORS設定
+origins = [
+    "http://localhost",
+    "http://localhost:8080",
+    "http://localhost:3000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 # ファイルシステムのルート作成
+
+
 @app.post("/signup")
 def create_root():
     # DID等は、一旦スキップ、TODO
     root = CryptTreeNode(name="root", isDirectory=True, parent=None)
     data = {
-        "key":root.keydata,
-        "metadata":root.get_encrypted_metadata()
+        "key": root.keydata,
+        "metadata": root.get_encrypted_metadata()
     }
-    root_cid = fake_ipfs.add(json.dumps(data).encode()) # ルートのIPFS置き場所はどっかに覚えとおかないといけない希ガス, フロント？バッグ？
-    return root_cid, root.subfolder_key # ルート情報を復号化する鍵もどっかに覚えとおかないといけない希ガス, フロント？バッグ？
+    # ルートのIPFS置き場所はどっかに覚えとおかないといけない希ガス, フロント？バッグ？
+    root_cid = fake_ipfs.add(json.dumps(data).encode())
+    # ルート情報を復号化する鍵もどっかに覚えとおかないといけない希ガス, フロント？バッグ？
+    return root_cid, root.subfolder_key
 
 # ファイルシステムのルート取得, ルートの情報があるIPFSのCIDと鍵を渡してもらう想定
+
+
 @app.post("/login")
 def fetch_root(req: RootRequest):
     encrypted_data = json.loads(fake_ipfs.cat(req.cid).decode())
@@ -34,7 +58,7 @@ def fetch_root(req: RootRequest):
     sk = req.root_key
     bk = Fernet(sk).decrypt(key_info["enc_backlink_key"])
     dk = Fernet(bk).decrypt(key_info["enc_data_key"])
-    
+
     # Derive metadata
     decrypted_data = Fernet(dk).decrypt(encrypted_data["metadata"])
 
@@ -42,19 +66,20 @@ def fetch_root(req: RootRequest):
     global current_node
     current_node = PlainNode(json.loads(decrypted_data.decode()), req.root_key)
     cryptree_cache.put("#", current_node)
-    
-    return decrypted_data
+
+    return current_node
+
 
 @app.get("/{path}")
 def read(path: str):
     global current_node
     if current_node is None:
         return "You should login"
-    
+
     if cryptree_cache.contains_key(path):
         current_node = cryptree_cache.get(path)
         return current_node.metadata
-    
+
     print(current_node.metadata)
 
     if path not in current_node.metadata["child"]:
@@ -62,12 +87,13 @@ def read(path: str):
 
     cid = current_node.metadata["child"][path]["cid"]
     encrypted_data = json.loads(fake_ipfs.cat(cid).decode())
-    
+
     key_info = encrypted_data["key"]
-    sk = Fernet(current_node.subfolder_key).decrypt(key_info["enc_subfolder_key"])
+    sk = Fernet(current_node.subfolder_key).decrypt(
+        key_info["enc_subfolder_key"])
     bk = Fernet(sk).decrypt(key_info["enc_backlink_key"])
     dk = Fernet(bk).decrypt(key_info["enc_data_key"])
-    
+
     decrypted_data = Fernet(dk).decrypt(encrypted_data["metadata"])
 
     current_node.metadata = json.loads(decrypted_data.decode())
@@ -78,6 +104,8 @@ def read(path: str):
 
 # 新規フォルダー・ファイル作成
 # TODO recursion
+
+
 @app.post("/upload")
 def upload_data(req: UploadDataRequest):
     global current_node
@@ -86,13 +114,15 @@ def upload_data(req: UploadDataRequest):
 
     new_node = None
     if req.isDirectory:
-        new_node = CryptTreeNode(name=req.name, isDirectory=True, parent=current_node)
+        new_node = CryptTreeNode(
+            name=req.name, isDirectory=True, parent=current_node)
     else:
-        new_node = CryptTreeNode(name=req.name, isDirectory=False, parent=current_node, data=req.data)
+        new_node = CryptTreeNode(
+            name=req.name, isDirectory=False, parent=current_node, data=req.data)
 
     data = {
-        "key":new_node.keydata,
-        "metadata":new_node.get_encrypted_metadata()
+        "key": new_node.keydata,
+        "metadata": new_node.get_encrypted_metadata()
     }
 
     print(data)
@@ -104,22 +134,29 @@ def upload_data(req: UploadDataRequest):
     # while len(path) != 0:
     #     node.get_encrypted_metadata()
     #     fake_ipfs.add(json.dumps(data).encode())
-        
+
     return current_node.metadata
 
 # 再暗号化
+
+
 @app.post("/reencrypt")
 def reencrypt():
-    pass # TODO
+    pass  # TODO
 
 # Share data
+
+
 @app.get("/share")
 def get_key_for_sharing_data():
-    pass # TODO
+    pass  # TODO
 
 # 以下、まだ使ってないです。無視してください、すみません、消したくないです、PAGNI
+
+
 def serialize_object(obj) -> bytes:
     return pickle.dumps(obj)
+
 
 def deserialize_object(data: bytes):
     return pickle.loads(data)

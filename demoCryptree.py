@@ -123,11 +123,7 @@ class CryptTree:
         return nodes_to_reencrypt
 
     def decrypt_nodes_recursively(self, node):
-        # print(f"Files in {node.name}: {[f.name for f in node.files]}")
-        # print("decrypt_nodes_from_target called")
         print("---------------------------------------------------")
-        # print(
-        #     f"Node name: {node.name}, Files in node: {[f.name for f in node.files]}")
         print(f"node name: {node.name}")
         print(f"self.name: {self.name}")
 
@@ -140,7 +136,6 @@ class CryptTree:
 
             # フォルダのサブフォルダとファイルのリストを取得して再帰的に復号化
             for subfolder in node.folders:
-                # print(f"Files in folder {node.name} before decryption: {[f.name for f in node.files]}")
                 print(
                     f"Processing subfolder {subfolder.name} of {node.name}")
                 self.decrypt_nodes_recursively(subfolder)
