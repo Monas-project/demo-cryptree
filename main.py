@@ -1,13 +1,15 @@
 import json
+import copy
 import pickle
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from cryptography.fernet import Fernet
 
 from fakeIPFS import FakeIPFS
 from cache import CryptreeCache
-from cryptree import CryptTreeNode, PlainNode
-from model import RootRequest, UploadDataRequest
+from cryptree import CryptTreeNode
+from model import RootRequest, UploadDataRequest, FetchDataRequest
 
 app = FastAPI()
 fake_ipfs = FakeIPFS()
@@ -36,7 +38,7 @@ app.add_middleware(
 @app.post("/signup")
 def create_root():
     # DID等は、一旦スキップ、TODO
-    root = CryptTreeNode(name="root", isDirectory=True, parent=None)
+    root = CryptTreeNode.create_node(name="root", isDirectory=True, parent=None)
     data = {
         "key": root.keydata,
         "metadata": root.get_encrypted_metadata()
@@ -44,7 +46,10 @@ def create_root():
     # ルートのIPFS置き場所はどっかに覚えとおかないといけない希ガス, フロント？バッグ？
     root_cid = fake_ipfs.add(json.dumps(data).encode())
     # ルート情報を復号化する鍵もどっかに覚えとおかないといけない希ガス, フロント？バッグ？
-    return root_cid, root.subfolder_key
+    return {
+            "cid":root_cid,
+            "key":root.subfolder_key.decode("utf-8")
+        }
 
 # ファイルシステムのルート取得, ルートの情報があるIPFSのCIDと鍵を渡してもらう想定
 
@@ -64,15 +69,17 @@ def fetch_root(req: RootRequest):
 
     # Set root info and cache
     global current_node
-    current_node = PlainNode(json.loads(decrypted_data.decode()), req.root_key)
-    cryptree_cache.put("#", current_node)
+    current_node = CryptTreeNode(json.loads(decrypted_data.decode()), key_info, req.root_key)
+    cryptree_cache.put("/", current_node)
 
     return current_node
 
 
-@app.get("/{path}")
-def read(path: str):
+@app.post("/fetch")
+def read(body: FetchDataRequest):
     global current_node
+    path = body.path
+
     if current_node is None:
         return "You should login"
 
@@ -85,7 +92,7 @@ def read(path: str):
     if path not in current_node.metadata["child"]:
         return "No data"
 
-    cid = current_node.metadata["child"][path]["cid"]
+    cid = current_node.metadata["child"][path]["metadata_cid"]
     encrypted_data = json.loads(fake_ipfs.cat(cid).decode())
 
     key_info = encrypted_data["key"]
@@ -97,8 +104,10 @@ def read(path: str):
     decrypted_data = Fernet(dk).decrypt(encrypted_data["metadata"])
 
     current_node.metadata = json.loads(decrypted_data.decode())
+    current_node.keydata = key_info
     current_node.subfolder_key = sk
-    cryptree_cache.put(path, current_node)
+    cryptree_cache.put(path, copy.copy(current_node))
+    print(current_node.metadata)
 
     return decrypted_data
 
@@ -112,13 +121,12 @@ def upload_data(req: UploadDataRequest):
     if current_node is None:
         return "You should login"
 
-    new_node = None
-    if req.isDirectory:
-        new_node = CryptTreeNode(
-            name=req.name, isDirectory=True, parent=current_node)
-    else:
-        new_node = CryptTreeNode(
-            name=req.name, isDirectory=False, parent=current_node, data=req.data)
+    new_node = CryptTreeNode.create_node(
+        name=req.name,
+        isDirectory=req.isDirectory,
+        parent=current_node,
+        file_cid=req.data_cid
+    )
 
     data = {
         "key": new_node.keydata,
@@ -126,14 +134,35 @@ def upload_data(req: UploadDataRequest):
     }
 
     print(data)
-    cid = fake_ipfs.add(json.dumps(data).encode())
+    cid = fake_ipfs.add(json.dumps(data).encode()) 
     current_node.add_node(cid, req.name, req.path, req.isDirectory)
 
     # TODO recursion
-    # path = req.path.split("/")
-    # while len(path) != 0:
-    #     node.get_encrypted_metadata()
-    #     fake_ipfs.add(json.dumps(data).encode())
+    path = req.path.split("/")
+    while len(path) != 1:
+        child_path = "/".join(path)
+        path.pop()
+        parent_path = "/".join(path)
+        if parent_path == "":
+            parent_path = "/"
+
+        parent_node = None
+        if cryptree_cache.contains_key(parent_path):
+            parent_node = cryptree_cache.get(parent_path)
+        else:
+            encrypted_data = json.loads(fake_ipfs.cat(cid).decode())
+
+        print(child_path)
+        print(parent_path)
+        print(parent_node.metadata)
+        parent_node.metadata["child"][child_path]["metadata_cid"] = cid
+        data = {
+            "key": parent_node.keydata,
+            "metadata": parent_node.get_encrypted_metadata()
+        }
+        print(data)
+        cid = fake_ipfs.add(json.dumps(data).encode()) 
+        cryptree_cache.put(parent_path, copy.copy(parent_node))
 
     return current_node.metadata
 
@@ -150,6 +179,10 @@ def reencrypt():
 @app.get("/share")
 def get_key_for_sharing_data():
     pass  # TODO
+
+@app.get("/cacheclear")
+def cache_clear():
+    cryptree_cache.clear()
 
 # 以下、まだ使ってないです。無視してください、すみません、消したくないです、PAGNI
 

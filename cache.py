@@ -1,7 +1,7 @@
 from collections import OrderedDict
 from typing import Optional, Tuple
 
-from cryptree import PlainNode
+from cryptree import CryptTreeNode
 
 class LRUCache:
     def __init__(self, capacity: int):
@@ -11,7 +11,7 @@ class LRUCache:
     def contains_key(self, key) -> bool:
         return key in self.cache
 
-    def get(self, key) -> Optional[PlainNode]:
+    def get(self, key) -> Optional[CryptTreeNode]:
         if key in self.cache:
             self.cache.move_to_end(key)
             return self.cache[key]
@@ -24,6 +24,9 @@ class LRUCache:
         if len(self.cache) > self.capacity:
             self.cache.popitem(last=False)
 
+    def clear(self):
+        self.cache.clear()
+
 class CryptreeCache:
     def __init__(self):
         cache_size = 1000
@@ -32,19 +35,22 @@ class CryptreeCache:
     def contains_key(self, cache_key: Tuple) -> bool:
         return self.cache.contains_key(cache_key)
 
-    def get(self, cache_key: str) -> Optional[PlainNode]:
+    def get(self, cache_key: str) -> Optional[CryptTreeNode]:
         return self.cache.get(cache_key)
 
-    def put(self, cache_key: str, val: PlainNode) -> None:
+    def put(self, cache_key: str, val: CryptTreeNode) -> None:
         self.cache.put(cache_key, val)
 
-    def update(self, prior_root: PlainNode, cache_key: Tuple, val: PlainNode) -> None:
+    def update(self, prior_root: CryptTreeNode, cache_key: Tuple, val: CryptTreeNode) -> None:
         if prior_root is not None:
             temp_dict = dict(self.cache.cache)
             for key, value in temp_dict.items():
                 if key[0] == prior_root:
                     self.cache.put((cache_key[0], key[1]), value)
         self.cache.put(cache_key, val)
+
+    def clear(self):
+        self.cache.clear()
 
 
 ## Unit Test 

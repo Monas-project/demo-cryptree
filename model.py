@@ -6,6 +6,12 @@ class RootRequest(BaseModel):
 
 class UploadDataRequest(BaseModel):
     name: str
-    path: str
+    path: str # /foo/bar/c.png
     isDirectory: bool
-    data: str
+    data_cid: str
+
+class FetchDataRequest(BaseModel):
+    path: str # /foo/bar/c.png
+
+class SignInRequest(BaseModel):
+    public_key: str
