@@ -9,7 +9,7 @@ from cryptography.fernet import Fernet
 from fakeIPFS import FakeIPFS
 from cache import CryptreeCache
 from cryptree import CryptTreeNode
-from model import RootRequest, UploadDataRequest, FetchDataRequest
+from model import RootRequest, UploadDataRequest, FetchDataRequest, FetchKeyRequest, DecryptRequest
 
 app = FastAPI()
 fake_ipfs = FakeIPFS()
@@ -38,7 +38,8 @@ app.add_middleware(
 @app.post("/signup")
 def create_root():
     # DID等は、一旦スキップ、TODO
-    root = CryptTreeNode.create_node(name="root", isDirectory=True, parent=None)
+    root = CryptTreeNode.create_node(
+        name="root", isDirectory=True, parent=None)
     data = {
         "key": root.keydata,
         "metadata": root.get_encrypted_metadata()
@@ -47,9 +48,9 @@ def create_root():
     root_cid = fake_ipfs.add(json.dumps(data).encode())
     # ルート情報を復号化する鍵もどっかに覚えとおかないといけない希ガス, フロント？バッグ？
     return {
-            "cid":root_cid,
-            "key":root.subfolder_key.decode("utf-8")
-        }
+        "cid": root_cid,
+        "key": root.subfolder_key.decode("utf-8")
+    }
 
 # ファイルシステムのルート取得, ルートの情報があるIPFSのCIDと鍵を渡してもらう想定
 
@@ -69,7 +70,8 @@ def fetch_root(req: RootRequest):
 
     # Set root info and cache
     global current_node
-    current_node = CryptTreeNode(json.loads(decrypted_data.decode()), key_info, req.root_key)
+    current_node = CryptTreeNode(json.loads(
+        decrypted_data.decode()), key_info, req.root_key)
     cryptree_cache.put("/", current_node)
 
     return current_node
@@ -109,7 +111,7 @@ def read(body: FetchDataRequest):
     cryptree_cache.put(path, copy.copy(current_node))
     print(current_node.metadata)
 
-    return decrypted_data
+    return current_node.metadata
 
 # 新規フォルダー・ファイル作成
 # TODO recursion
@@ -134,7 +136,7 @@ def upload_data(req: UploadDataRequest):
     }
 
     print(data)
-    cid = fake_ipfs.add(json.dumps(data).encode()) 
+    cid = fake_ipfs.add(json.dumps(data).encode())
     current_node.add_node(cid, req.name, req.path, req.isDirectory)
 
     # TODO recursion
@@ -161,7 +163,7 @@ def upload_data(req: UploadDataRequest):
             "metadata": parent_node.get_encrypted_metadata()
         }
         print(data)
-        cid = fake_ipfs.add(json.dumps(data).encode()) 
+        cid = fake_ipfs.add(json.dumps(data).encode())
         cryptree_cache.put(parent_path, copy.copy(parent_node))
 
     return current_node.metadata
@@ -173,12 +175,42 @@ def upload_data(req: UploadDataRequest):
 def reencrypt():
     pass  # TODO
 
+# 復号化
+
+
+@app.post("/decrypt")
+def decrypt_data(req: DecryptRequest):
+    decrypt_key = req.key
+    encrypted_data = req.data
+    return {
+        "data": Fernet(decrypt_key).decrypt(encrypted_data.encode())
+    }
+
+# key取得
+
+
+@app.post("/fetchkey")
+def fetch_key(req: FetchKeyRequest):
+    global current_node
+    path_data = req.path
+    print(req.path)
+    if current_node is None:
+        return "You should login"
+
+    if cryptree_cache.contains_key(path_data):
+        print("cache hit")
+        current_node = cryptree_cache.get(path_data)
+        return {
+            "key": current_node.subfolder_key
+        }
+
 # Share data
 
 
 @app.get("/share")
 def get_key_for_sharing_data():
     pass  # TODO
+
 
 @app.get("/cacheclear")
 def cache_clear():
