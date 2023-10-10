@@ -9,7 +9,7 @@ from cryptography.fernet import Fernet
 from fakeIPFS import FakeIPFS
 from cache import CryptreeCache
 from cryptree import CryptTreeNode
-from model import RootRequest, UploadDataRequest, FetchDataRequest, FetchKeyRequest, DecryptRequest
+from model import RootRequest, UploadDataRequest, FetchDataRequest, FetchKeyRequest, DecryptRequest,ReencNodeRequest
 
 app = FastAPI()
 fake_ipfs = FakeIPFS()
@@ -172,8 +172,9 @@ def upload_data(req: UploadDataRequest):
 
 
 @app.post("/reencrypt")
-def reencrypt():
-    pass  # TODO
+def reencrypt(req: ReencNodeRequest):
+    return reenc(req.path)
+
 
 # 復号化
 
@@ -225,3 +226,47 @@ def serialize_object(obj) -> bytes:
 
 def deserialize_object(data: bytes):
     return pickle.loads(data)
+
+
+def reenc(path: str, parent_sk=None, is_directory=False):
+    current_node = None
+    if cryptree_cache.contains_key(path):
+        current_node = cryptree_cache.get(path)
+    else:
+        pass #TODO
+
+    if parent_sk is None:
+        tmp = path.split("/")
+        tmp.pop()
+        parent_path = "/".join(tmp)
+        if parent_path == "": parent_path = "/"
+
+        parent_node = None
+        if cryptree_cache.contains_key(parent_path):
+            parent_node = cryptree_cache.get(parent_path)
+        parent_sk = parent_node.subfolder_key
+
+    if not is_directory:
+        current_node.reencrypt(parent_sk=parent_sk)
+        data = {
+            "key": current_node.keydata,
+            "metadata": current_node.get_encrypted_metadata()
+        }
+        cid = fake_ipfs.add(json.dumps(data).encode()) 
+        cryptree_cache.put(path, copy.copy(current_node))
+        return cid
+        
+    new_sk = Fernet.generate_key()
+    for child in current_node.metadata["child"].keys():
+        cid = reenc(child, new_sk, current_node.metadata["child"][child].isDirectory)
+        current_node["child"][child]["metadata_cid"] = cid
+
+    current_node.reencrypt(parent_sk=parent_sk, new_sk=new_sk)
+    data = {
+        "key": current_node.keydata,
+        "metadata": current_node.get_encrypted_metadata()
+    }
+    cid = fake_ipfs.add(json.dumps(data).encode()) 
+    cryptree_cache.put(path, copy.copy(current_node))
+
+    return cid

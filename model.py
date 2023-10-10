@@ -28,3 +28,6 @@ class DecryptRequest(BaseModel):
 
 class FetchKeyRequest(BaseModel):
     path: str
+
+class ReencNodeRequest(BaseModel):
+    path: str

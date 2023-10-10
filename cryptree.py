@@ -51,4 +51,17 @@ class CryptTreeNode:
             "is_directory":is_directory
         }
 
+    def reencrypt(self, parent_sk: bytes, new_sk: bytes = None):
+        if new_sk is None:
+            new_sk = Fernet.generate_key()
+        new_bk = Fernet.generate_key()
+        new_dk = Fernet.generate_key()
+
+        keydata = {}
+        keydata["enc_subfolder_key"] = Fernet(parent_sk).encrypt(new_sk).decode()
+        keydata["enc_backlink_key"] = Fernet(new_sk).encrypt(new_bk).decode()
+        keydata["enc_data_key"] = Fernet(new_bk).encrypt(new_dk).decode()
+        
+        self.keydata = keydata
+        self.subfolder_key = new_sk
 
