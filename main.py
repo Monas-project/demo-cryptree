@@ -8,6 +8,7 @@ from cryptography.fernet import Fernet
 from web3 import Web3
 from eth_account.messages import encode_defunct
 from datetime import timedelta
+import ipfshttpclient
 
 from fakeIPFS import FakeIPFS
 from cryptreeCache import CryptreeCache
@@ -78,7 +79,13 @@ def create_root(req: SignInRequest):
             "metadata": root.get_encrypted_metadata()
         }
         # ルートのIPFS置き場所はどっかに覚えとおかないといけない希ガス, フロント？バッグ？
-        root_cid = fake_ipfs.add(json.dumps(data).encode())
+        client = ipfshttpclient.connect()  # Connects to: /dns/localhost/tcp/5001/http
+        print("connected")
+        # res = client.add_json(json.dumps(data).encode())
+        root_cid = client.add_json(data)
+        print("root_cid: ", root_cid)
+        root_json = client.get_json(root_cid)
+        print("json: ", root_json)
         # ルート情報を復号化する鍵もどっかに覚えとおかないといけない希ガス, フロント？バッグ？
 
         global owner_data_map
