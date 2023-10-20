@@ -9,7 +9,7 @@ from cryptography.fernet import Fernet
 from fakeIPFS import FakeIPFS
 from cache import CryptreeCache
 from cryptree import CryptTreeNode
-from model import RootRequest, UploadDataRequest, FetchDataRequest, FetchKeyRequest, DecryptRequest,ReencNodeRequest
+from model import RootRequest, UploadDataRequest, FetchDataRequest, FetchKeyRequest, DecryptRequest, ReencNodeRequest
 
 app = FastAPI()
 fake_ipfs = FakeIPFS()
@@ -45,6 +45,7 @@ def create_root():
         "metadata": root.get_encrypted_metadata()
     }
     # ルートのIPFS置き場所はどっかに覚えとおかないといけない希ガス, フロント？バッグ？
+    # subfolderキーで暗号化したデータをIPFSに置く
     root_cid = fake_ipfs.add(json.dumps(data).encode())
     # ルート情報を復号化する鍵もどっかに覚えとおかないといけない希ガス, フロント？バッグ？
     return {
@@ -123,11 +124,15 @@ def upload_data(req: UploadDataRequest):
     if current_node is None:
         return "You should login"
 
+    if not req.isDirectory:
+        file_content = req.data.file.read()
+
     new_node = CryptTreeNode.create_node(
         name=req.name,
         isDirectory=req.isDirectory,
         parent=current_node,
-        file_cid=req.data_cid
+        # file_cid=req.data_cid
+        file_data=file_content
     )
 
     data = {
@@ -160,7 +165,7 @@ def upload_data(req: UploadDataRequest):
         parent_node.metadata["child"][child_path]["metadata_cid"] = cid
         data = {
             "key": parent_node.keydata,
-            "metadata": parent_node.get_encrypted_metadata()
+            "metadata": parent_node.r()
         }
         print(data)
         cid = fake_ipfs.add(json.dumps(data).encode())
@@ -233,13 +238,14 @@ def reenc(path: str, parent_sk=None, is_directory=False):
     if cryptree_cache.contains_key(path):
         current_node = cryptree_cache.get(path)
     else:
-        pass #TODO
+        pass  # TODO
 
     if parent_sk is None:
         tmp = path.split("/")
         tmp.pop()
         parent_path = "/".join(tmp)
-        if parent_path == "": parent_path = "/"
+        if parent_path == "":
+            parent_path = "/"
 
         parent_node = None
         if cryptree_cache.contains_key(parent_path):
@@ -252,13 +258,14 @@ def reenc(path: str, parent_sk=None, is_directory=False):
             "key": current_node.keydata,
             "metadata": current_node.get_encrypted_metadata()
         }
-        cid = fake_ipfs.add(json.dumps(data).encode()) 
+        cid = fake_ipfs.add(json.dumps(data).encode())
         cryptree_cache.put(path, copy.copy(current_node))
         return cid
-        
+
     new_sk = Fernet.generate_key()
     for child in current_node.metadata["child"].keys():
-        cid = reenc(child, new_sk, current_node.metadata["child"][child].isDirectory)
+        cid = reenc(child, new_sk,
+                    current_node.metadata["child"][child].isDirectory)
         current_node["child"][child]["metadata_cid"] = cid
 
     current_node.reencrypt(parent_sk=parent_sk, new_sk=new_sk)
@@ -266,7 +273,7 @@ def reenc(path: str, parent_sk=None, is_directory=False):
         "key": current_node.keydata,
         "metadata": current_node.get_encrypted_metadata()
     }
-    cid = fake_ipfs.add(json.dumps(data).encode()) 
+    cid = fake_ipfs.add(json.dumps(data).encode())
     cryptree_cache.put(path, copy.copy(current_node))
 
     return cid
