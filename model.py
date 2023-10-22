@@ -34,3 +34,4 @@ class FetchKeyRequest(BaseModel):
 
 class ReencNodeRequest(BaseModel):
     path: str
+    is_directory: bool

@@ -250,6 +250,8 @@ def reenc(path: str, parent_sk=None, is_directory=False):
         parent_node = None
         if cryptree_cache.contains_key(parent_path):
             parent_node = cryptree_cache.get(parent_path)
+        else:
+            pass  # TODO
         parent_sk = parent_node.subfolder_key
 
     if not is_directory:
