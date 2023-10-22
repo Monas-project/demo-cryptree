@@ -14,7 +14,7 @@ class CryptTreeNode:
         self.subfolder_key = subfolder_key
 
     @classmethod
-    def create_node(self, name, isDirectory, parent=None, file_data=None):
+    def create_node(self, name, owner_id, isDirectory, parent=None, file_data=None):
         subfolder_key = Fernet.generate_key()
         backlink_key = Fernet.generate_key()
         data_key = Fernet.generate_key()
@@ -26,6 +26,8 @@ class CryptTreeNode:
         keydata = {}
         metadata = {}
         metadata["name"] = name
+        # add wallet connect
+        metadata["owner_id"] = owner_id
         metadata["creation_data"] = datetime.datetime.now().strftime(
             "%Y/%m/%d %H:%M:%S")
         keydata["enc_backlink_key"] = Fernet(

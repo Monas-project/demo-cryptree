@@ -1,20 +1,28 @@
 import json
 import copy
 import pickle
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from cryptography.fernet import Fernet
+from web3 import Web3
+from eth_account.messages import encode_defunct
+from datetime import timedelta
 
 from fakeIPFS import FakeIPFS
-from cache import CryptreeCache
+from cryptreeCache import CryptreeCache
 from cryptree import CryptTreeNode
-from model import RootRequest, UploadDataRequest, FetchDataRequest, FetchKeyRequest, DecryptRequest, ReencNodeRequest
+from auth import AuthLogin
+from model import RootRequest, UploadDataRequest, FetchDataRequest, FetchKeyRequest, DecryptRequest, ReencNodeRequest, SignInRequest
 
 app = FastAPI()
 fake_ipfs = FakeIPFS()
 cryptree_cache = CryptreeCache()
 current_node = None
+# wallet connect追加
+w3 = Web3()
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+owner_data_map = {}  # owner_id -> user_data
 
 # CORS設定
 origins = [
@@ -34,35 +42,82 @@ app.add_middleware(
 
 # ファイルシステムのルート作成
 
+# @app.post("/auth")
+# def authenticate(req: AuthRequest):
+#     # Verify the signature
+
 
 @app.post("/signup")
-def create_root():
+def create_root(req: SignInRequest):
     # DID等は、一旦スキップ、TODO
-    root = CryptTreeNode.create_node(
-        name="root", isDirectory=True, parent=None)
-    data = {
-        "key": root.keydata,
-        "metadata": root.get_encrypted_metadata()
-    }
-    # ルートのIPFS置き場所はどっかに覚えとおかないといけない希ガス, フロント？バッグ？
-    # subfolderキーで暗号化したデータをIPFSに置く
-    root_cid = fake_ipfs.add(json.dumps(data).encode())
-    # ルート情報を復号化する鍵もどっかに覚えとおかないといけない希ガス, フロント？バッグ？
-    return {
-        "cid": root_cid,
-        "key": root.subfolder_key.decode("utf-8")
-    }
+    # wallet connect追加
+    userAddress = req.address
+    if userAddress is None:
+        return "You should connect wallet"
+
+    # message = "Please sign this message to log in."
+    message = encode_defunct(text="Please sign this message to log in.")
+    recovered_address = w3.eth.account.recover_message(
+        message, signature=req.signature)
+
+    if recovered_address == userAddress:
+        # Authentication successful, create JWT
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = AuthLogin.create_access_token(
+            data={"sub": userAddress}, expires_delta=access_token_expires)
+
+        # create root
+        owner_id = req.address
+        print(owner_id)
+        print(req.address)
+
+        root = CryptTreeNode.create_node(
+            name="root", isDirectory=True, parent=None, owner_id=owner_id)
+        data = {
+            "key": root.keydata,
+            "metadata": root.get_encrypted_metadata()
+        }
+        # ルートのIPFS置き場所はどっかに覚えとおかないといけない希ガス, フロント？バッグ？
+        root_cid = fake_ipfs.add(json.dumps(data).encode())
+        # ルート情報を復号化する鍵もどっかに覚えとおかないといけない希ガス, フロント？バッグ？
+
+        global owner_data_map
+        owner_data_map[owner_id] = {
+            "cid": root_cid,
+            "key": root.subfolder_key.decode("utf-8")
+        }
+        print(owner_data_map)
+
+        # return {
+        #     "cid": root_cid,
+        #     "key": root.subfolder_key.decode("utf-8")
+        # }
+        # return owner_data_map[owner_id]
+
+        return {"access_token": access_token, "token_type": "bearer"}
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication failed")
 
 # ファイルシステムのルート取得, ルートの情報があるIPFSのCIDと鍵を渡してもらう想定
 
 
 @app.post("/login")
 def fetch_root(req: RootRequest):
-    encrypted_data = json.loads(fake_ipfs.cat(req.cid).decode())
+    # add wallet connect
+    global owner_data_map, current_node
+    print(owner_data_map)
+    if req.address not in owner_data_map:
+        return "You should sign up"
+
+    owner_id = req.address
+    user_data = owner_data_map.get(owner_id)
+
+    encrypted_data = json.loads(fake_ipfs.cat(user_data["cid"]).decode())
     key_info = encrypted_data["key"]
 
     # Derive key
-    sk = req.root_key
+    sk = user_data["key"]
     bk = Fernet(sk).decrypt(key_info["enc_backlink_key"])
     dk = Fernet(bk).decrypt(key_info["enc_data_key"])
 
@@ -70,9 +125,8 @@ def fetch_root(req: RootRequest):
     decrypted_data = Fernet(dk).decrypt(encrypted_data["metadata"])
 
     # Set root info and cache
-    global current_node
     current_node = CryptTreeNode(json.loads(
-        decrypted_data.decode()), key_info, req.root_key)
+        decrypted_data.decode()), key_info, user_data["key"])
     cryptree_cache.put("/", current_node)
 
     return current_node
@@ -129,6 +183,7 @@ def upload_data(req: UploadDataRequest):
 
     new_node = CryptTreeNode.create_node(
         name=req.name,
+        owner_id=req.id,
         isDirectory=req.isDirectory,
         parent=current_node,
         # file_cid=req.data_cid
