@@ -22,6 +22,8 @@ class CryptTreeNode:
         file_key = None
         if not isDirectory:
             file_key = Fernet.generate_key()
+            keydata["enc_file_key"] = Fernet(
+                data_key).encrypt(file_key).decode()
 
         keydata = {}
         metadata = {}
@@ -53,8 +55,7 @@ class CryptTreeNode:
 
         keydata["enc_data_key"] = Fernet(
             backlink_key).encrypt(data_key).decode()
-        keydata["enc_file_key"] = Fernet(
-            data_key).encrypt(file_key).decode()
+
         return CryptTreeNode(metadata=metadata, keydata=keydata, subfolder_key=subfolder_key)
 
     def get_encrypted_metadata(self):

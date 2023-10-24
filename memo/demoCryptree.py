@@ -1,7 +1,7 @@
 # import os
 from cryptography.fernet import Fernet
 import json
-from _auth import DID, generate_challenge, sign_challenge, verify_signature, PRIVATE_KEY
+from memo._auth import DID, generate_challenge, sign_challenge, verify_signature, PRIVATE_KEY
 
 
 class KeyStorage:

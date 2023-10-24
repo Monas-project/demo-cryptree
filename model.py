@@ -1,5 +1,6 @@
 from pydantic import BaseModel
-from fastapi import UploadFile
+from fastapi import UploadFile, Form, File
+from typing import Optional, List
 
 
 # class AuthRequest(BaseModel):
@@ -28,10 +29,10 @@ class RootRequest(BaseModel):
 class UploadDataRequest(BaseModel):
     name: str
     id: str
-    path: str  # /foo/bar/c.png
+    path: str
     isDirectory: bool
-    # data_cid: str
-    data: UploadFile
+    data: Optional[List[UploadFile]]
+    # data: UploadFile = None
 
 
 class FetchDataRequest(BaseModel):
