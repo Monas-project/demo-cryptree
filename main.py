@@ -11,14 +11,14 @@ from eth_account.messages import encode_defunct
 from datetime import timedelta
 import ipfshttpclient
 
-from fakeIPFS import FakeIPFS
+# from fakeIPFS import FakeIPFS
 from cryptreeCache import CryptreeCache
 from cryptree import CryptTreeNode
 from auth import AuthLogin
 from model import RootRequest, UploadDataRequest, FetchDataRequest, FetchKeyRequest, DecryptRequest, ReencNodeRequest, SignInRequest
 
 app = FastAPI()
-fake_ipfs = FakeIPFS()
+# fake_ipfs = FakeIPFS()
 cryptree_cache = CryptreeCache()
 current_node = None
 # wallet connect追加
@@ -187,7 +187,8 @@ def upload_data(
     id: str = Form(),
     path: str = Form(),
     isDirectory: bool = Form(),
-    data: List[UploadFile] = Form([]),
+    data: List[UploadFile] = File([]),
+    # data: UploadFile = File(),
 ):
     req = UploadDataRequest(
         name=name,
@@ -204,7 +205,9 @@ def upload_data(
         return "You should login"
 
     if not req.isDirectory:
-        file_content = req.data.file.read()
+        # file_content = req.data.file.read()
+        for file in req.data:
+            file_content = file.file.read()
 
     new_node = CryptTreeNode.create_node(
         name=req.name,

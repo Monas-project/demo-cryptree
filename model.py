@@ -32,6 +32,7 @@ class UploadDataRequest(BaseModel):
     path: str
     isDirectory: bool
     data: Optional[List[UploadFile]]
+    # data: Optional[List[UploadFile]]
     # data: UploadFile = None
 
 
