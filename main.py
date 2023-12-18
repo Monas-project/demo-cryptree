@@ -103,8 +103,6 @@ def create_root(req: SignInRequest):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication failed")
 
 # ファイルシステムのルート取得, ルートの情報があるIPFSのCIDと鍵を渡してもらう想定
-
-
 @app.post("/login")
 def fetch_root(req: RootRequest):
     # add wallet connect
@@ -200,6 +198,7 @@ def upload_data(
 # def upload_data(req: UploadDataRequest):
     print("uploadのreq: ", req)
     global current_node
+    print("current_node: ", current_node)
     file_content = None
     if current_node is None:
         return "You should login"
@@ -208,6 +207,7 @@ def upload_data(
         # file_content = req.data.file.read()
         for file in req.data:
             file_content = file.file.read()
+            print("file_content: ", file_content)
 
     new_node = CryptTreeNode.create_node(
         name=req.name,
@@ -217,11 +217,13 @@ def upload_data(
         # file_cid=req.data_cid
         file_data=file_content
     )
+    print("new_node: ", new_node)
 
     data = {
         "key": new_node.keydata,
         "metadata": new_node.get_encrypted_metadata()
     }
+    print("data[metadata]: ", data["metadata"])
 
     cid = client.add_json(data)
     print("cid: ", cid)
@@ -260,9 +262,12 @@ def upload_data(
             "key": parent_node.keydata,
             "metadata": parent_node.get_encrypted_metadata()
         }
-        print(data)
+        print("parent_node", data)
         cid = client.add_json(data)
+        print("parent_cid: ", cid)
         cryptree_cache.put(parent_path, copy.copy(parent_node))
+    
+    print("これリターンするcurrent_node.metadata", current_node.metadata)
 
     return current_node.metadata
 
@@ -282,7 +287,7 @@ def decrypt_data(req: DecryptRequest):
     decrypt_key = req.key
     encrypted_data = req.data
     return {
-        "data": Fernet(decrypt_key).decrypt(encrypted_data.encode())
+        "data": decrypt_key.decrypt(encrypted_data.encode())
     }
 
 # key取得
@@ -290,19 +295,27 @@ def decrypt_data(req: DecryptRequest):
 
 @app.post("/fetchkey")
 def fetch_key(req: FetchKeyRequest):
+    print("fetchkeyのreq: ", req)
     global current_node
     path_data = req.path
     print(req.path)
+    print("current_node: ", current_node)
     if current_node is None:
+        print("You should login")
         return "You should login"
 
+    print("クリプトツリーから取得")
+    print("cryptree_cache.contains_key(path_data)", cryptree_cache.contains_key(path_data))
     if cryptree_cache.contains_key(path_data):
         print("cache hit")
         current_node = cryptree_cache.get(path_data)
+        print("decrypt_key", current_node.get_decrypt_key)
+        print("metadata", current_node.metadata)
         return {
-            "key": current_node.subfolder_key
+            "decrypt_key": current_node.get_decrypt_key,
+            "metadata": current_node.metadata
         }
-
+    print("cache miss")
 # Share data
 
 

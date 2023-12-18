@@ -104,3 +104,14 @@ class CryptTreeNode:
 
         self.keydata = keydata
         self.subfolder_key = new_sk
+    
+
+    def get_decrypt_key(self):
+        # 復号化に必要なキーを取得
+        bk = Fernet(self.subfolder_key).decrypt(
+            self.keydata["enc_backlink_key"].encode())
+        dk = Fernet(bk).decrypt(self.keydata["enc_data_key"].encode())
+
+        # Fernetオブジェクトを使用してメタデータを復号化
+        f = Fernet(dk)
+        return f
