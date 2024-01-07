@@ -7,6 +7,9 @@ class FakeIPFS:
     def add(self, data: bytes) -> str:
         """Adds data to the fake IPFS and returns a CID (Content IDentifier)."""
         # Compute a simple CID using SHA256. This isn't the real algorithm IPFS uses, but it'll work for our mock version.
+        if isinstance(data, str):
+            data = data.encode()
+            
         cid = hashlib.sha256(data).hexdigest()
         self.datastore[cid] = data
         return cid

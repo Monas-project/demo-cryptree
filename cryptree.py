@@ -5,18 +5,20 @@ from fakeIPFS import FakeIPFS
 import ipfshttpclient
 
 # For creating cryptree node described in the paper
-# fake_ipfs = FakeIPFS()
-client = ipfshttpclient.connect()
+fake_ipfs = FakeIPFS()
+#IPFSが使えないから一時的にコメントアウト
+#client = ipfshttpclient.connect()
 
 
 class CryptTreeNode:
-    def __init__(self, metadata, keydata, subfolder_key):
+    def __init__(self, metadata, keydata, subfolder_key, fake_ipfs):
         self.metadata = metadata
         self.keydata = keydata
         self.subfolder_key = subfolder_key
+        self.ipfs_client = fake_ipfs #IPFSが起動できないから一時的に追加
 
     @classmethod
-    def create_node(self, name, owner_id, isDirectory, parent=None, file_data=None):
+    def create_node(self, name, owner_id, isDirectory, ipfs_client, parent=None, file_data=None):
         keydata = {}
         subfolder_key = Fernet.generate_key()
         backlink_key = Fernet.generate_key()
@@ -63,7 +65,7 @@ class CryptTreeNode:
             # ファイルだったら暗号化してfile作成
             enc_file_data = Fernet(
                 file_key).encrypt(file_data).decode()
-            file_cid = client.add_json(enc_file_data)
+            file_cid = ipfs_client.add(enc_file_data) #一旦FakeIPFSを使用するためaddに変更
             metadata["file_cid"] = file_cid
         else:
             metadata["child"] = {}
@@ -71,7 +73,7 @@ class CryptTreeNode:
         keydata["enc_data_key"] = Fernet(
             backlink_key).encrypt(data_key).decode()
 
-        return CryptTreeNode(metadata=metadata, keydata=keydata, subfolder_key=subfolder_key)
+        return CryptTreeNode(metadata=metadata, keydata=keydata, subfolder_key=subfolder_key, fake_ipfs=ipfs_client)
 
     def get_encrypted_metadata(self):
         bk = Fernet(self.subfolder_key).decrypt(
@@ -89,6 +91,18 @@ class CryptTreeNode:
             "name": name,
             "is_directory": is_directory
         }
+
+    def find_deepest_node(self):
+        if "child" in self.metadata and self.metadata["child"]:
+            for child_key, child_info in self.metadata["child"].items():
+                child_cid = child_info["metadata_cid"]
+                child_metadata_json = self.ipfs_client.cat(child_cid).decode('utf-8')
+                child_metadata = json.loads(child_metadata_json)
+                child_node = CryptTreeNode(metadata=child_metadata, keydata={}, subfolder_key="", fake_ipfs=self.ipfs_client)
+                return child_node.find_deepest_node()
+        else:
+            return self
+
 
     def reencrypt(self, parent_sk: bytes, new_sk: bytes = None):
         if new_sk is None:
