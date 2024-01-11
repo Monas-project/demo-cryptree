@@ -1,3 +1,6 @@
+import sys
+sys.path.append('/mnt/c/Users/isiyu/OneDrive/デスクトップ/Monas/demo-cryptree/src')
+
 import unittest
 import json
 from cryptree import CryptTreeNode
@@ -30,9 +33,9 @@ class TestCryptTreeNode(unittest.TestCase):
 
     print("Root Node Metadata:", self.root_node.metadata)
     print("Sub Folder 1 Metadata:", self.sub_folder1.metadata)
-    print("Sub Folder 2 Metadata:", self.sub_folder2.metadata)
-    print("Sub Folder 3 Metadata:", self.sub_folder3.metadata)
-    print("File 1 Metadata:", self.file1.metadata)
+    #print("Sub Folder 2 Metadata:", self.sub_folder2.metadata)
+    #print("Sub Folder 3 Metadata:", self.sub_folder3.metadata)
+    #print("File 1 Metadata:", self.file1.metadata)
 
     print("setUpが実行されました")
   

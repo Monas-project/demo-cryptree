@@ -3,6 +3,7 @@ import datetime
 from cryptography.fernet import Fernet
 from fakeIPFS import FakeIPFS
 import ipfshttpclient
+from src.main import FetchKeyRequest
 
 # For creating cryptree node described in the paper
 fake_ipfs = FakeIPFS()
@@ -92,15 +93,34 @@ class CryptTreeNode:
             "is_directory": is_directory
         }
 
-    def find_deepest_node(self):
+    def find_deepest_node(self, fetch_key):
+        print(f"Current Node: {self.metadata['name']}")  # 現在のノード名を出力
+        # 現在のノードが子ノードを持っている場合
         if "child" in self.metadata and self.metadata["child"]:
-            for child_key, child_info in self.metadata["child"].items():
+            # すべての子ノードをループして、最も深いノードを見つける
+            deepest_node = self
+            for _, child_info in self.metadata["child"].items():
                 child_cid = child_info["metadata_cid"]
-                child_metadata_json = self.ipfs_client.cat(child_cid).decode('utf-8')
-                child_metadata = json.loads(child_metadata_json)
+                #CIDから暗号化されたメタデータを取得
+                encrypted_metadata = self.ipfs_client.cat(child_cid).decode('utf-8')
+
+                #復号化キーを取得
+                fetch_key_request = FetchKeyRequest(path=child_cid)
+                decrypt_key = fetch_key(fetch_key_request).get("decrypt_key")
+
+                #メタデータを復号化
+                decrypted_metadata_json = decrypt_data(DecryptRequest(key=decrypt_key, data=encrypted_metadata))
+                child_metadata = json.loads(decrypted_metadata_json)
+
                 child_node = CryptTreeNode(metadata=child_metadata, keydata={}, subfolder_key="", fake_ipfs=self.ipfs_client)
-                return child_node.find_deepest_node()
+                # 再帰的に最深ノードを検索
+                current_deepest_node = child_node.find_deepest_node()
+                # 最も深いノードを更新
+                if deepest_node:
+                    return deepest_node
         else:
+            print(f"Deepest node is: {self.metadata['name']}")  # 最深ノードとして自身を出力
+            # 子ノードが存在しない場合、自身が最深ノード
             return self
 
 

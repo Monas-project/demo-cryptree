@@ -10,10 +10,10 @@ from web3 import Web3
 from eth_account.messages import encode_defunct
 from datetime import timedelta
 import ipfshttpclient
+from cryptree import CryptTreeNode
 
 # from fakeIPFS import FakeIPFS
 from cryptreeCache import CryptreeCache
-from cryptree import CryptTreeNode
 from auth import AuthLogin
 from model import RootRequest, UploadDataRequest, FetchDataRequest, FetchKeyRequest, DecryptRequest, ReencNodeRequest, SignInRequest
 
@@ -292,7 +292,7 @@ def decrypt_data(req: DecryptRequest):
 
 # key取得
 
-
+#ここで鍵とメタデータを取得
 @app.post("/fetchkey")
 def fetch_key(req: FetchKeyRequest):
     print("fetchkeyのreq: ", req)
