@@ -21,6 +21,7 @@ app = FastAPI()
 # fake_ipfs = FakeIPFS()
 cryptree_cache = CryptreeCache()
 current_node = None
+print("current_node", current_node)
 # wallet connect追加
 w3 = Web3()
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
@@ -58,49 +59,51 @@ def create_root(req: SignInRequest):
     if userAddress is None:
         return "You should connect wallet"
 
-    # message = "Please sign this message to log in."
-    message = encode_defunct(text="Please sign this message to log in.")
-    recovered_address = w3.eth.account.recover_message(
-        message, signature=req.signature)
+    # # message = "Please sign this message to log in."
+    # message = encode_defunct(text="Please sign this message to log in.")
+    # recovered_address = w3.eth.account.recover_message(
+    #     message, signature=req.signature)
 
-    if recovered_address == userAddress:
-        # Authentication successful, create JWT
-        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_token = AuthLogin.create_access_token(
-            data={"sub": userAddress}, expires_delta=access_token_expires)
+    # if recovered_address == userAddress:
+    #     # Authentication successful, create JWT
+    #     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    #     access_token = AuthLogin.create_access_token(
+    #         data={"sub": userAddress}, expires_delta=access_token_expires)
 
-        # create root
-        owner_id = req.address
-        print(owner_id)
-        print(req.address)
+    # create root
+    owner_id = userAddress
+    print(owner_id)
+    print(userAddress)
 
-        root = CryptTreeNode.create_node(
-            name="root", isDirectory=True, parent=None, owner_id=owner_id)
-        data = {
-            "key": root.keydata,
-            "metadata": root.get_encrypted_metadata()
-        }
-        # ルートのIPFS置き場所はどっかに覚えとおかないといけない希ガス, フロント？バッグ？
-        # client = ipfshttpclient.connect()  # Connects to: /dns/localhost/tcp/5001/http
-        print("connected")
-        # res = client.add_json(json.dumps(data).encode())
-        root_cid = client.add_json(data)
-        print("root_cid: ", root_cid)
-        root_json = client.get_json(root_cid)
-        print("json: ", root_json)
-        # ルート情報を復号化する鍵もどっかに覚えとおかないといけない希ガス, フロント？バッグ？
+    root = CryptTreeNode.create_node(
+        name="root", isDirectory=True, parent=None, owner_id=owner_id)
+    data = {
+        "key": root.keydata,
+        "metadata": root.get_encrypted_metadata()
+    }
+    # ルートのIPFS置き場所はどっかに覚えとおかないといけない希ガス, フロント？バッグ？
+    # client = ipfshttpclient.connect()  # Connects to: /dns/localhost/tcp/5001/http
+    print("connected")
+    # res = client.add_json(json.dumps(data).encode())
+    root_cid = client.add_json(data)
+    print("root_cid: ", root_cid)
+    root_json = client.get_json(root_cid)
+    print("json: ", root_json)
+    # ルート情報を復号化する鍵もどっかに覚えとおかないといけない希ガス, フロント？バッグ？
 
-        global owner_data_map
-        owner_data_map[owner_id] = {
-            "cid": root_cid,
-            "key": root.subfolder_key.decode("utf-8")
-        }
-        print(owner_data_map)
+    global owner_data_map
+    owner_data_map[owner_id] = {
+        "cid": root_cid,
+        "key": root.subfolder_key.decode("utf-8")
+    }
+    print(owner_data_map)
 
-        return {"access_token": access_token, "token_type": "bearer"}
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication failed")
+    return {"root_json": root_json}, {"root_cid": root_cid}
+
+    # return {"access_token": access_token, "token_type": "bearer"}
+    # else:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication failed")
 
 # ファイルシステムのルート取得, ルートの情報があるIPFSのCIDと鍵を渡してもらう想定
 @app.post("/login")
@@ -110,46 +113,63 @@ def fetch_root(req: RootRequest):
     print(owner_data_map)
     if req.address not in owner_data_map:
         return "You should sign up"
-
     owner_id = req.address
-    user_data = owner_data_map.get(owner_id)
-    print("user_data", user_data)
-    print(user_data["cid"])
+    
+    # message = "Please sign this message to log in."
+    message = encode_defunct(text="Please sign this message to log in.")
+    recovered_address = w3.eth.account.recover_message(
+        message, signature=req.signature)
 
-    encrypted_data = json.loads(client.cat(user_data["cid"]))
-    print("encrypted_data", encrypted_data)
-    key_info = encrypted_data["key"]
+    if recovered_address == owner_id:
+        # Authentication successful, create JWT
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = AuthLogin.create_access_token(
+            data={"sub": owner_id}, expires_delta=access_token_expires)
 
-    # Derive key
-    sk = user_data["key"]
-    bk = Fernet(sk).decrypt(key_info["enc_backlink_key"])
-    dk = Fernet(bk).decrypt(key_info["enc_data_key"])
+        user_data = owner_data_map.get(owner_id)
+        print("user_data", user_data)
+        print(user_data["cid"])
 
-    # Derive metadata
-    decrypted_data = Fernet(dk).decrypt(encrypted_data["metadata"])
+        encrypted_data = json.loads(client.cat(user_data["cid"]))
+        print("encrypted_data", encrypted_data)
+        key_info = encrypted_data["key"]
 
-    # Set root info and cache
-    current_node = CryptTreeNode(json.loads(
-        decrypted_data.decode()), key_info, user_data["key"])
-    print("login current_node", current_node)
-    cryptree_cache.put("/", current_node)
+        # Derive key
+        sk = user_data["key"]
+        bk = Fernet(sk).decrypt(key_info["enc_backlink_key"])
+        dk = Fernet(bk).decrypt(key_info["enc_data_key"])
 
-    return current_node
+        # Derive metadata
+        decrypted_data = Fernet(dk).decrypt(encrypted_data["metadata"])
+
+        # Set root info and cache
+        current_node = CryptTreeNode(json.loads(
+            decrypted_data.decode()), key_info, user_data["key"])
+        print("login current_node", current_node)
+        cryptree_cache.put("/", current_node)
+
+        # return current_node
+        return current_node, {"access_token": access_token, "token_type": "bearer"}
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication failed")
 
 
 @app.post("/fetch")
 def read(body: FetchDataRequest):
     global current_node
     path = body.path
+    print("fetchのpath: ", path)
 
     if current_node is None:
         return "You should login"
 
     if cryptree_cache.contains_key(path):
         current_node = cryptree_cache.get(path)
+        print("fetch current_node", current_node)
         return current_node.metadata
 
-    print(current_node.metadata)
+    print("current_node", current_node.metadata)
 
     if path not in current_node.metadata["child"]:
         return "No data"
@@ -173,6 +193,7 @@ def read(body: FetchDataRequest):
     cryptree_cache.put(path, copy.copy(current_node))
     print(current_node.metadata)
 
+    print("fetch current_node", current_node)
     return current_node.metadata
 
 # 新規フォルダー・ファイル作成
@@ -252,8 +273,8 @@ def upload_data(
             print("elseの中はいりましたーー！")
             encrypted_data = json.loads(client.cat(cid).decode())
 
-        print(child_path)
-        print(parent_path)
+        print("child_path", child_path)
+        print("parent_path", parent_path)
         # print(parent_node.metadata)
         if parent_node is None:
             raise ValueError("parent_nodeがNoneです!")
@@ -268,6 +289,7 @@ def upload_data(
         cryptree_cache.put(parent_path, copy.copy(parent_node))
     
     print("これリターンするcurrent_node.metadata", current_node.metadata)
+    print("upload current_node", current_node)
 
     return current_node.metadata
 

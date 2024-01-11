@@ -15,7 +15,7 @@ class Token(BaseModel):
 
 class SignInRequest(BaseModel):
     address: str
-    signature: str
+    # signature: str
 
 
 # class RootRequest(BaseModel):
@@ -24,6 +24,7 @@ class SignInRequest(BaseModel):
 
 class RootRequest(BaseModel):
     address: str
+    signature: str
 
 
 class UploadDataRequest(BaseModel):
