@@ -18,3 +18,9 @@ uvicorn main:app --reload
 http://localhost:8000/docs
 
 なんか足りなかったら適宜 pip install お願いします
+
+## Version
+
+```sh
+ipfs version
+```
