@@ -1,4 +1,5 @@
 import hashlib
+import json 
 
 class FakeIPFS:
     def __init__(self):
@@ -9,6 +10,13 @@ class FakeIPFS:
         # Compute a simple CID using SHA256. This isn't the real algorithm IPFS uses, but it'll work for our mock version.
         cid = hashlib.sha256(data).hexdigest()
         self.datastore[cid] = data
+        return cid
+
+    def add_json(self, data) -> str:
+        """Adds data to the fake IPFS and returns a CID (Content IDentifier)."""
+        # Compute a simple CID using SHA256. This isn't the real algorithm IPFS uses, but it'll work for our mock version.
+        cid = hashlib.sha256(json.dumps(data).encode()).hexdigest()
+        self.datastore[cid] = json.dumps(data).encode()
         return cid
 
     def cat(self, cid: str) -> bytes:

@@ -1,13 +1,15 @@
+import os
 import json
 import datetime
 from cryptography.fernet import Fernet
 from fakeIPFS import FakeIPFS
 import ipfshttpclient
 
-# For creating cryptree node described in the paper
-# fake_ipfs = FakeIPFS()
-client = ipfshttpclient.connect()
-
+# 例: 環境変数 'TEST_ENV' が 'True' の場合にのみ実際の接続を行う
+if os.environ.get('TEST_ENV') != 'True':
+    client = ipfshttpclient.connect()
+else:
+    client = FakeIPFS()  # テスト用の偽のIPFSクライアント
 
 class CryptTreeNode:
     def __init__(self, metadata, keydata, subfolder_key):
@@ -21,12 +23,6 @@ class CryptTreeNode:
         subfolder_key = Fernet.generate_key()
         backlink_key = Fernet.generate_key()
         data_key = Fernet.generate_key()
-        # ファイルだったらfk作成
-        # file_key = None
-        # if not isDirectory:
-        #     file_key = Fernet.generate_key()
-        #     keydata["enc_file_key"] = Fernet(
-        #         data_key).encrypt(file_key).decode()
 
         metadata = {}
         metadata["name"] = name
@@ -45,15 +41,6 @@ class CryptTreeNode:
                 backlink_key).encrypt(parent_info).decode()
             keydata["enc_subfolder_key"] = Fernet(
                 parent.subfolder_key).encrypt(subfolder_key).decode()
-
-        # if isDirectory:
-        #     metadata["child"] = {}
-        # else:
-        #     # ファイルだったら暗号化してfile作成
-        #     enc_file_data = Fernet(
-        #         file_key).encrypt(file_data).decode()
-        #     file_cid = fake_ipfs.add(enc_file_data)
-        #     metadata["file_cid"] = file_cid
 
         if not isDirectory:
             file_key = Fernet.generate_key()
