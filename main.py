@@ -1,3 +1,4 @@
+import os
 import json
 import copy
 import pickle
@@ -13,16 +14,21 @@ from datetime import timedelta
 import ipfs_api
 
 
-# from fakeIPFS import FakeIPFS
+from fakeIPFS import FakeIPFS
 from cryptreeCache import CryptreeCache
 from cryptree import CryptTreeNode
 from auth import AuthLogin
 from model import RootRequest, UploadDataRequest, FetchDataRequest, FetchKeyRequest, DecryptRequest, ReencNodeRequest, SignInRequest
 
 app = FastAPI()
-# fake_ipfs = FakeIPFS()
 cryptree_cache = CryptreeCache()
-current_node = None
+# current_node = None
+current_node = CryptTreeNode.create_node(
+        name="root", 
+        isDirectory=True,
+        parent=None,
+        owner_id="test"
+    ) # this code is for testing. 
 print("current_node", current_node)
 # wallet connect追加
 w3 = Web3()
@@ -43,8 +49,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# client = ipfshttpclient.connect()
-# client = ipfs_api.connect()
+
+# if os.environ.get('TEST_ENV') != 'True':
+#     client = ipfshttpclient.connect()
+# else:
+#     client = FakeIPFS()  # For unittest
+#     cryptree_cache.put("/", current_node)
 
 
 # ファイルシステムのルート作成
