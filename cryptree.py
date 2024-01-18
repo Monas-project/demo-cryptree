@@ -2,11 +2,13 @@ import json
 import datetime
 from cryptography.fernet import Fernet
 from fakeIPFS import FakeIPFS
-import ipfshttpclient
+# import ipfshttpclient
+import ipfs_api
 
 # For creating cryptree node described in the paper
 # fake_ipfs = FakeIPFS()
-client = ipfshttpclient.connect()
+# client = ipfshttpclient.connect()
+# client = ipfs_api.connect()
 
 
 class CryptTreeNode:
@@ -63,7 +65,9 @@ class CryptTreeNode:
             # ファイルだったら暗号化してfile作成
             enc_file_data = Fernet(
                 file_key).encrypt(file_data).decode()
-            file_cid = client.add_json(enc_file_data)
+            # file_cid = client.add_json(enc_file_data)
+            # 一旦コメントアウト
+            file_cid = ipfs_api.publish(enc_file_data)
             metadata["file_cid"] = file_cid
         else:
             metadata["child"] = {}

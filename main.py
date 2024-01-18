@@ -9,7 +9,9 @@ from cryptography.fernet import Fernet
 from web3 import Web3
 from eth_account.messages import encode_defunct
 from datetime import timedelta
-import ipfshttpclient
+# import ipfshttpclient
+import ipfs_api
+
 
 # from fakeIPFS import FakeIPFS
 from cryptreeCache import CryptreeCache
@@ -41,7 +43,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-client = ipfshttpclient.connect()
+# client = ipfshttpclient.connect()
+# client = ipfs_api.connect()
 
 
 # ファイルシステムのルート作成
@@ -85,9 +88,11 @@ def create_root(req: SignInRequest):
     # client = ipfshttpclient.connect()  # Connects to: /dns/localhost/tcp/5001/http
     print("connected")
     # res = client.add_json(json.dumps(data).encode())
-    root_cid = client.add_json(data)
+    # root_cid = client.add_json(data)
+    root_cid = ipfs_api.publish(data)
     print("root_cid: ", root_cid)
-    root_json = client.get_json(root_cid)
+    # 1/18一旦コメントアウト
+    # root_json = client.get_json(root_cid)
     print("json: ", root_json)
     # ルート情報を復号化する鍵もどっかに覚えとおかないといけない希ガス, フロント？バッグ？
 
@@ -130,7 +135,8 @@ def fetch_root(req: RootRequest):
         print("user_data", user_data)
         print(user_data["cid"])
 
-        encrypted_data = json.loads(client.cat(user_data["cid"]))
+        # 1/18一旦コメントアウト
+        # encrypted_data = json.loads(client.cat(user_data["cid"]))
         print("encrypted_data", encrypted_data)
         key_info = encrypted_data["key"]
 
@@ -176,7 +182,8 @@ def read(body: FetchDataRequest):
 
     cid = current_node.metadata["child"][path]["metadata_cid"]
     # encrypted_data = json.loads(fake_ipfs.cat(cid).decode())
-    encrypted_data = json.loads(client.cat(cid))
+    # 1/18一旦コメントアウト
+    # encrypted_data = json.loads(client.cat(cid))
     print("fetch : ", encrypted_data)
 
     key_info = encrypted_data["key"]
@@ -246,7 +253,8 @@ def upload_data(
     }
     print("data[metadata]: ", data["metadata"])
 
-    cid = client.add_json(data)
+    # 1/18一旦コメントアウト
+    # cid = client.add_json(data)
     print("cid: ", cid)
 
     current_node.add_node(cid, req.name, req.path, req.isDirectory)
@@ -271,7 +279,8 @@ def upload_data(
             parent_node = cryptree_cache.get(parent_path)
         else:
             print("elseの中はいりましたーー！")
-            encrypted_data = json.loads(client.cat(cid).decode())
+            # 1/18一旦コメントアウト
+            # encrypted_data = json.loads(client.cat(cid).decode())
 
         print("child_path", child_path)
         print("parent_path", parent_path)
@@ -284,7 +293,8 @@ def upload_data(
             "metadata": parent_node.get_encrypted_metadata()
         }
         print("parent_node", data)
-        cid = client.add_json(data)
+        # 1/18一旦コメントアウト
+        # cid = client.add_json(data)
         print("parent_cid: ", cid)
         cryptree_cache.put(parent_path, copy.copy(parent_node))
     
