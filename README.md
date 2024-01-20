@@ -1,4 +1,6 @@
 # demo-cryptree
+This directory is the development code for the Monas prototype.
+
 
 ## Usage
 
